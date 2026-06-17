@@ -10,13 +10,26 @@
    ========================================================================== */
 
 /* ----------------------------------------------------------------- CONFIG */
-const SHEETS_ENDPOINT = "";   // paste your Apps Script /exec URL when ready
-const AUTO_ADVANCE = true;    // auto-move to next card after a single-tap answer
+const SHEETS_ENDPOINT = "https://script.google.com/macros/s/AKfycbwjgikfdWox1FiG44LiQSY0bnynMKX0fBfjq6MDtPfDFwM0PnMuCiBlas4sP0WbeOw-2Q/exec";
+const SUBMIT_ENABLED = false;  // MASTER SWITCH — false = don't write to the Sheet (test mode). Flip to true to collect data.
+const AUTO_ADVANCE = true;     // auto-move to next card after a single-tap answer
 
 /* --------------------------------------------------------------- STATE */
 const answers = {};           // index (single/multiple/binary) or value (likert/matrix)
-const scenarioVersion = Math.random() < 0.5 ? "A" : "B";
-let lang = localStorage.getItem("survey_lang") || "tr";
+
+// A/B scenario: random 50/50, unless forced with ?ab=A / ?ab=B (for testing only)
+const _ab = (new URLSearchParams(location.search).get("ab") || "").toUpperCase();
+const scenarioVersion = (_ab === "A" || _ab === "B") ? _ab : (Math.random() < 0.5 ? "A" : "B");
+
+// Initial language: ?lang=en / ?lang=tr (or the /EN/ link) wins, else saved, else TR.
+function initialLang() {
+  const p = (new URLSearchParams(location.search).get("lang") || "").toLowerCase();
+  if (p === "en" || p === "eng") return "en";
+  if (p === "tr") return "tr";
+  if (/\/en\/?$/i.test(location.pathname)) return "en";
+  return localStorage.getItem("survey_lang") || "tr";
+}
+let lang = initialLang();
 let screens = [];
 let stepIndex = 0;
 let ended = false;
@@ -529,8 +542,8 @@ function setStatus(state) {
 
 async function submit() {
   const payload = buildPayload();
-  if (!SHEETS_ENDPOINT) {
-    console.log("[survey] No SHEETS_ENDPOINT set — payload would be:", payload);
+  if (!SHEETS_ENDPOINT || !SUBMIT_ENABLED) {
+    console.log("[survey] Submission disabled (test mode) — payload would be:", payload);
     setStatus("ok");
     return;
   }
