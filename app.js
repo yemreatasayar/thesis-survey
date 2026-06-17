@@ -10,7 +10,7 @@
    ========================================================================== */
 
 /* ----------------------------------------------------------------- CONFIG */
-const SHEETS_ENDPOINT = "https://script.google.com/macros/s/AKfycbwjgikfdWox1FiG44LiQSY0bnynMKX0fBfjq6MDtPfDFwM0PnMuCiBlas4sP0WbeOw-2Q/exec";
+const SHEETS_ENDPOINT = "https://script.google.com/macros/s/AKfycbyXTnovAl66NST70RKK4fbI7x8jVB5BlI4fxY_t4g2U6UNNJ_of1S93SxEgFK75e0obIA/exec";
 const SUBMIT_ENABLED = false;  // MASTER SWITCH — false = don't write to the Sheet (test mode). Flip to true to collect data.
 const AUTO_ADVANCE = true;     // auto-move to next card after a single-tap answer
 
