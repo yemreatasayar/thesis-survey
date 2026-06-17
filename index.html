@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Consumer Acceptance of AI-Driven Customer Service — Survey</title>
+  <meta name="description" content="A Master's thesis survey on consumer acceptance of AI-driven customer-service chatbots. Anonymous, no personal data collected." />
+  <meta name="robots" content="noindex" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="head">
+      <div class="lang" role="group" aria-label="Language">
+        <button id="langTR" class="lang__btn" type="button">TR</button>
+        <button id="langEN" class="lang__btn" type="button">ENG</button>
+      </div>
+      <h1 class="app__title" id="appTitle"></h1>
+    </header>
+
+    <div id="screen"><!-- card(s) injected here --></div>
+
+    <div class="progress"><div class="progress__fill" id="progressFill"></div></div>
+    <div class="footer__label" id="progressLabel"></div>
+    <div class="footer__author" id="author"></div>
+  </main>
+
+  <script src="survey-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
