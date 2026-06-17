@@ -16,13 +16,15 @@
 
 // Column order written to the sheet. Edit if your questions change.
 var HEADERS = [
-  "timestamp", "scenarioVersion",
+  "timestamp", "scenarioVersion", "language",
   "Q1","Q2","Q3","Q4","Q5","Q6","Q7","Q8","Q9",
   // Q10 = willingness (5 tasks), Q11 = complexity (5 tasks)
   "Q10_1","Q10_2","Q10_3","Q10_4","Q10_5",
   "Q11_1","Q11_2","Q11_3","Q11_4","Q11_5",
-  "Q12","Q13","Q14","Q15","Q16","Q17","Q18","Q19","Q20","Q21","Q22","Q23","Q24",
-  "Q25","Q26","Q27"
+  // Q12–Q22 evaluation (1–7), Q23 behavioural intention
+  "Q12","Q13","Q14","Q15","Q16","Q17","Q18","Q19","Q20","Q21","Q22","Q23",
+  // demographics
+  "Q24","Q25","Q26"
 ];
 
 function doPost(e) {
@@ -41,6 +43,7 @@ function doPost(e) {
     var row = HEADERS.map(function (h) {
       if (h === "timestamp") return data.submittedAt || new Date().toISOString();
       if (h === "scenarioVersion") return data.scenarioVersion || "";
+      if (h === "language") return data.language || "";
 
       // Matrix items Q10_n / Q11_n  ->  answers.Q10.row(n-1)
       var m = h.match(/^(Q10|Q11)_(\d)$/);

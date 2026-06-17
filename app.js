@@ -37,7 +37,8 @@ const el = (tag, cls, html) => {
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const t = (obj) => (obj && obj[lang] != null ? obj[lang] : obj && obj.en) || "";
-const scaleLabels = (name) => SURVEY.scales[name][lang] || SURVEY.scales[name].en;
+// display number prefix: "Q12" in English, "S12" in Turkish
+const qNum = (q) => (lang === "tr" ? "S" : "Q") + q.id.slice(1);
 const AUTO_TYPES = ["binary", "single", "multiple", "likert"];
 
 /* ----------------------------------------------------- FLOW (one Q / card) */
@@ -55,7 +56,16 @@ function buildScreens() {
   SURVEY.sections.forEach((s) => {
     if (s.type === "questions") {
       if (s.group) {
-        out.push({ kind: "group", s });               // all questions on one card
+        out.push({ kind: "group", s, qs: s.questions });          // all questions on one card
+      } else if (s.withScenario) {
+        // chunk into cards (default 3) beside the conversation; `solo` questions stay alone
+        let chunk = [];
+        const flush = () => { if (chunk.length) { out.push({ kind: "group", s, qs: chunk }); chunk = []; } };
+        s.questions.forEach((q) => {
+          if (q.solo) { flush(); out.push({ kind: "group", s, qs: [q] }); }
+          else { chunk.push(q); if (chunk.length >= (s.chunk || 3)) flush(); }
+        });
+        flush();
       } else {
         s.questions.forEach((q) => { if (!skipped.has(q.id)) out.push({ kind: "question", s, q }); });
       }
@@ -83,7 +93,7 @@ function render() {
   screens = buildScreens();
   if (stepIndex > screens.length - 1) stepIndex = screens.length - 1;
   const screen = screens[stepIndex];
-  const isDual = screen.kind === "question" && screen.s.withScenario;
+  const isDual = !!(screen.s && screen.s.withScenario);
 
   if (isDual) renderDual(root, screen);
   else        renderSingle(root, screen);
@@ -113,7 +123,7 @@ function renderSingle(root, screen) {
 
   if (screen.kind === "intro")       renderIntro(body, screen.s);
   else if (screen.kind === "thanks") renderThanks(body, screen.s);
-  else if (screen.kind === "group")  renderGroup(body, screen.s);
+  else if (screen.kind === "group")  renderQuestionList(body, screen.s, screen.qs);
   else                               renderQuestion(body, screen.s, screen.q);
 
   card.appendChild(body);
@@ -135,11 +145,11 @@ function renderDual(root, screen) {
   chat.appendChild(chatBody);
   dual.appendChild(chat);
 
-  // right: the current question (this one swipes)
+  // right: this card's questions (a chunk of up to `chunk`, this one swipes)
   const qCard = newCard(screen.s.card);
   qCard.classList.add("swipe-anim", "dual__q");
   const qBody = el("div", "card__body");
-  renderQuestion(qBody, screen.s, screen.q);
+  renderQuestionList(qBody, screen.s, screen.qs);
   qCard.appendChild(qBody);
   qCard.appendChild(buildNav(screen));
   dual.appendChild(qCard);
@@ -175,7 +185,7 @@ function statusClass() { return submitState === "ok" ? "ok" : submitState === "e
 function buildQuestionBlock(q) {
   const qWrap = el("div", "q");
   qWrap.dataset.qid = q.id;
-  qWrap.appendChild(el("p", "q__text", `<span class="q__num">${esc(q.id)}.</span>${esc(t(q.text))}`));
+  qWrap.appendChild(el("p", "q__text", `<span class="q__num">${esc(qNum(q))}.</span>${esc(t(q.text))}`));
   if (q.type === "binary")      qWrap.appendChild(buildBinary(q));
   else if (q.type === "likert") qWrap.appendChild(buildLikert(q));
   else if (q.type === "matrix") qWrap.appendChild(buildMatrix(q));
@@ -189,11 +199,11 @@ function renderQuestion(body, s, q) {
   body.appendChild(buildQuestionBlock(q));
 }
 
-// all of a section's questions on one card (e.g. consent)
-function renderGroup(body, s) {
+// a section header + a given list of questions on one card
+function renderQuestionList(body, s, qs) {
   body.appendChild(el("p", "section-eyebrow", esc(t(s.section))));
   body.appendChild(el("h2", "section-title", esc(t(s.title))));
-  s.questions.forEach((q) => body.appendChild(buildQuestionBlock(q)));
+  qs.forEach((q) => body.appendChild(buildQuestionBlock(q)));
 }
 
 function buildBinary(q) {
@@ -230,49 +240,53 @@ function buildOptions(q) {
   return box;
 }
 
-function buildLikert(q) {
-  const labels = scaleLabels(q.scale);
-  const box = el("div", "likert");
-  labels.forEach((label, i) => {
-    const value = i + 1;
-    const lab = el("label", "opt");
+// the two endpoint anchors (low … high) shown above a 1–7 scale
+function scaleAnchors(sc) {
+  const a = el("div", "matrix__anchors");
+  a.appendChild(el("span", null, esc(t(sc.low))));
+  a.appendChild(el("span", null, esc(t(sc.high))));
+  return a;
+}
+
+// a single horizontal row of 7 numbered circles
+function scaleRow(name, isChecked, onPick) {
+  const scale = el("div", "matrix__scale");
+  for (let v = 1; v <= 7; v++) {
+    const cell = el("label", "matrix__cell");
     const input = el("input");
-    input.type = "radio"; input.name = q.id; input.checked = answers[q.id] === value;
-    input.addEventListener("change", () => { answers[q.id] = value; clearInvalid(q.id); onAnswered(q); });
-    lab.appendChild(input);
-    lab.appendChild(el("span", "opt__dot"));
-    lab.appendChild(el("span", "opt__label", `${value}. ${esc(label)}`));
-    box.appendChild(lab);
-  });
+    input.type = "radio"; input.name = name; input.checked = isChecked(v);
+    input.addEventListener("change", () => onPick(v));
+    cell.appendChild(input);
+    cell.appendChild(el("span", "opt__dot"));
+    cell.appendChild(el("span", "matrix__num", String(v)));
+    scale.appendChild(cell);
+  }
+  return scale;
+}
+
+// single-statement 1–7 (endpoint-anchored, horizontal)
+function buildLikert(q) {
+  const sc = SURVEY.scales[q.scale];
+  const box = el("div", "matrix matrix--single");
+  box.appendChild(scaleAnchors(sc));
+  box.appendChild(scaleRow(q.id,
+    (v) => answers[q.id] === v,
+    (v) => { answers[q.id] = v; clearInvalid(q.id); onAnswered(q); }));
   return box;
 }
 
+// several 1–7 rows sharing one scale (Q10, Q11)
 function buildMatrix(q) {
-  const labels = scaleLabels(q.scale);
+  const sc = SURVEY.scales[q.scale];
   if (!answers[q.id]) answers[q.id] = {};
   const box = el("div", "matrix");
-
-  const anchors = el("div", "matrix__anchors");
-  anchors.appendChild(el("span", null, esc(labels[0])));
-  anchors.appendChild(el("span", null, esc(labels[labels.length - 1])));
-  box.appendChild(anchors);
-
+  box.appendChild(scaleAnchors(sc));
   q.rows.forEach((rowLabel, r) => {
     const row = el("div", "matrix__row");
     row.appendChild(el("div", "matrix__label", esc(t(rowLabel))));
-    const scale = el("div", "matrix__scale");
-    for (let v = 1; v <= 7; v++) {
-      const cell = el("label", "matrix__cell");
-      cell.title = labels[v - 1];
-      const input = el("input");
-      input.type = "radio"; input.name = `${q.id}_r${r}`; input.checked = answers[q.id][`row${r}`] === v;
-      input.addEventListener("change", () => { answers[q.id][`row${r}`] = v; clearInvalid(q.id); });
-      cell.appendChild(input);
-      cell.appendChild(el("span", "opt__dot"));
-      cell.appendChild(el("span", "matrix__num", String(v)));
-      scale.appendChild(cell);
-    }
-    row.appendChild(scale);
+    row.appendChild(scaleRow(`${q.id}_r${r}`,
+      (v) => answers[q.id][`row${r}`] === v,
+      (v) => { answers[q.id][`row${r}`] = v; clearInvalid(q.id); }));
     box.appendChild(row);
   });
   return box;
@@ -283,7 +297,7 @@ function scenarioLines(s) { return s.dialogue.concat(s.versions[scenarioVersion]
 // one chat bubble with an inline "CHATBOT:" / "YOU:" label and a typeable text span
 function makeBubble(line, text) {
   const b = el("div", `bubble ${line.who}`);
-  b.appendChild(el("span", "who", (line.who === "bot" ? t(SURVEY.ui.chatbot) : t(SURVEY.ui.you)) + ":"));
+  b.appendChild(el("span", "who", (line.who === "bot" ? t(SURVEY.ui.chatbot) : t(SURVEY.ui.customer)) + ":"));
   b.appendChild(document.createTextNode(" "));
   const span = el("span", "bubble__text");
   span.textContent = text;
@@ -364,7 +378,7 @@ function onAnswered(q) {
   const cur = screens[stepIndex];
   if (cur && cur.kind === "group") {
     // advance once every question on the card has an answer
-    if (cur.s.questions.every((qq) => isAnswered(qq))) {
+    if (cur.qs.every((qq) => isAnswered(qq))) {
       setTimeout(() => { if (!animating) goNext(); }, 450);
     }
     return;
@@ -392,9 +406,9 @@ function goNext() {
       return;
     }
   } else if (screen.kind === "group") {
-    const missing = screen.s.questions.filter((q) => !isAnswered(q)).map((q) => q.id);
+    const missing = screen.qs.filter((q) => !isAnswered(q)).map((q) => q.id);
     if (missing.length) { flagMissing(missing); return; }
-    for (const q of screen.s.questions) {
+    for (const q of screen.qs) {
       if (q.type === "binary" && q.endIfNo && answers[q.id] === 1) { changeStep(1, { end: true }); return; }
     }
   }
