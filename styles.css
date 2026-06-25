@@ -270,4 +270,53 @@ input:focus-visible + .opt__dot { outline: 2px solid var(--green); outline-offse
   .card { border-radius: 26px; }
   .matrix__cell { font-size: 10px; }
   .btn { padding: 11px 22px; }
+  .process { padding: 14px 16px; }
 }
+
+/* ---------------------------------------------- SCENARIO + COMPREHENSION GATE */
+/* the scenario is now the main reading content (no chatbot conversation) */
+.scenario__intro { margin: -4px 0 14px; }
+.scenario__intro p { font-weight: 500; font-size: 14.5px; line-height: 1.5; margin: 0 0 11px; }
+.scenario__intro p:last-child { margin-bottom: 0; }
+.scenario__note { font-weight: 700; font-size: 13.5px; line-height: 1.45; margin: 0 0 16px; }
+
+/* condition-specific "How the service process works" panel */
+.process { border: 2px solid var(--line); border-radius: 18px; padding: 16px 18px; background: rgba(255, 255, 255, 0.4); }
+/* when the process IS its own card (scenario dual layout) drop the box */
+.process--bare { border: none; padding: 0; background: transparent; }
+.dual__process .process__heading { font-size: clamp(16px, 2.4vw, 19px); margin-bottom: 14px; }
+.dual__process .process__steps li,
+.dual__process .process__summary,
+.dual__process .process__lead { font-size: 14px; }
+.process__heading { font-weight: 700; font-size: 15px; margin: 0 0 10px; }
+.process__lead { font-weight: 600; font-size: 13.5px; margin: 0 0 8px; }
+.process__steps { margin: 0 0 12px; padding-left: 20px; }
+.process__steps li { font-weight: 500; font-size: 13.5px; line-height: 1.45; margin: 0 0 6px; }
+.process__summary { font-weight: 700; font-size: 13.5px; line-height: 1.4; margin: 0 0 10px; }
+.process__arrow { font-weight: 600; font-size: 13px; line-height: 1.4; margin: 0; padding: 9px 12px; border-radius: 12px; background: var(--green-soft); color: var(--green-dark); }
+
+/* collapsible "Review the service process" */
+.review { margin: 0 0 18px; border: 1.5px solid rgba(5, 5, 5, 0.35); border-radius: 14px; padding: 0 14px; }
+.review[open] { padding-bottom: 14px; }
+.review__summary { cursor: pointer; font-weight: 700; font-size: 13.5px; padding: 11px 2px; list-style: none; }
+.review__summary::-webkit-details-marker { display: none; }
+.review__summary::before { content: "▸ "; }
+.review[open] .review__summary::before { content: "▾ "; }
+.review .process { margin-top: 4px; }
+
+/* correction message after an incorrect comprehension answer */
+.correction { border-left: 4px solid var(--red); background: var(--red-soft); border-radius: 12px; padding: 13px 16px; margin: 0 0 18px; }
+.correction__heading { font-weight: 700; font-size: 14.5px; margin: 0 0 8px; }
+.correction p { font-weight: 500; font-size: 13.5px; line-height: 1.5; margin: 0 0 8px; }
+.correction p:last-child { margin-bottom: 0; }
+
+/* final-confirmation checkbox */
+.confirm-box { display: flex; align-items: flex-start; gap: 11px; cursor: pointer; font-weight: 600; font-size: 14px; line-height: 1.4; padding: 4px 0; }
+.confirm-box input { position: absolute; opacity: 0; width: 0; height: 0; }
+.confirm-box .opt__dot { flex: 0 0 auto; border-radius: 6px; margin-top: 1px; }
+.confirm-box input:checked ~ .opt__dot { background: var(--green); border-color: var(--green); }
+.confirm-box.q--invalid .opt__dot { border-color: var(--red); }
+
+/* "Other" / self-describe free-text field */
+.other-text { display: block; width: 100%; margin-top: 10px; padding: 10px 12px; font: inherit; font-size: 14px; font-weight: 500; border: 2px solid var(--line); border-radius: 12px; background: transparent; }
+.other-text.is-hidden { display: none; }

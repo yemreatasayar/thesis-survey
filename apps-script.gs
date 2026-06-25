@@ -15,16 +15,26 @@
    ========================================================================== */
 
 // Column order written to the sheet. Edit if your questions change.
+// Revised questionnaire (19 Qs) + between-subjects condition + comprehension gate.
 var HEADERS = [
-  "timestamp", "scenarioVersion", "language",
-  "Q1","Q2","Q3","Q4","Q5","Q6","Q7","Q8","Q9",
-  // Q10 = willingness (5 tasks), Q11 = complexity (5 tasks)
-  "Q10_1","Q10_2","Q10_3","Q10_4","Q10_5",
-  "Q11_1","Q11_2","Q11_3","Q11_4","Q11_5",
-  // Q12–Q22 evaluation (1–7), Q23 behavioural intention
-  "Q12","Q13","Q14","Q15","Q16","Q17","Q18","Q19","Q20","Q21","Q22","Q23",
+  "timestamp", "participant_id", "condition", "language",
+  // eligibility + background
+  "Q1","Q2","Q3","Q4","Q5","Q6","Q6_text","Q7",
+  // general chatbot evaluation (Q8, 3 items, 1–7)
+  "q8_1","q8_2","q8_3",
+  // comprehension gate (Q9, Q10) — first attempt preserved
+  "q9_first_answer","q9_first_correct","q9_final_answer","q9_attempt_count",
+  "q10_first_answer","q10_first_correct","q10_final_answer","q10_attempt_count",
+  "correction_shown","final_confirmation_required","final_confirmation_completed","comprehension_passed",
+  // outcomes
+  "Q11",                                  // channel choice: chatbot | human
+  "q12_1","q12_2","q12_3","q12_4","q12_item_order",   // perceived failure cost (order randomised)
+  "q13_1","q13_2","q13_3",                // continuous willingness
+  "q14_1","q14_2",                        // perceived competence
+  "q15_1","q15_2",                        // scenario-specific trust
+  "q16_1","q16_2",                        // process credibility
   // demographics
-  "Q24","Q25","Q26"
+  "Q17","Q18","Q19","Q19_text"
 ];
 
 function doPost(e) {
@@ -42,17 +52,11 @@ function doPost(e) {
 
     var row = HEADERS.map(function (h) {
       if (h === "timestamp") return data.submittedAt || new Date().toISOString();
-      if (h === "scenarioVersion") return data.scenarioVersion || "";
+      if (h === "participant_id") return data.participant_id || "";
+      if (h === "condition") return data.condition || "";
       if (h === "language") return data.language || "";
 
-      // Matrix items Q10_n / Q11_n  ->  answers.Q10.row(n-1)
-      var m = h.match(/^(Q10|Q11)_(\d)$/);
-      if (m) {
-        var obj = a[m[1]] || {};
-        var v = obj["row" + (parseInt(m[2], 10) - 1)];
-        return v == null ? "" : v;
-      }
-
+      // The client sends a flat, pre-expanded answers object (keys = column names).
       var val = a[h];
       return val == null ? "" : val;
     });

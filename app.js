@@ -1,10 +1,14 @@
 /* =============================================================================
-   Thesis Survey — app logic
-   - One question per card (Tinder-style swipe between cards)
-   - Evaluation section = two cards: persistent conversation + current question
-   - Bilingual EN/TR (answers stored by option INDEX, so language is decoupled)
-   - Validation, branching (consent end / Q4 skip), random A/B scenario
-   - Auto-advance after answering single-answer questions
+   Thesis Survey — app logic (revised questionnaire, 19 Qs)
+   - Card-based, mobile-first (Tinder-style swipe between cards)
+   - Bilingual EN/TR (answers stored by option INDEX, language is decoupled)
+   - Between-subjects experiment: condition "standard" | "lossless"
+     assigned 50/50 AFTER Q8, persisted (refresh never changes it)
+   - Text scenario + condition-specific service process (no chatbot chat page)
+   - Comprehension gate (Q9, Q10): first-attempt preserved, condition-specific
+     correction, retry of wrong items, final confirmation after 2nd miss
+   - After Q11 (channel choice) backward navigation to scenario/gate is locked
+   - Validation, branching (consent end / Q4 skip), optional "Other" text
    - SEND shows an "are you sure?" confirmation, then POSTs to Google Apps Script
    No personal data is collected.
    ========================================================================== */
@@ -15,11 +19,51 @@ const SUBMIT_ENABLED = false;  // MASTER SWITCH — false = don't write to the S
 const AUTO_ADVANCE = true;     // auto-move to next card after a single-tap answer
 
 /* --------------------------------------------------------------- STATE */
-const answers = {};           // index (single/multiple/binary) or value (likert/matrix)
+const answers = {};           // index (single/binary) or value (matrix); also `${id}_text` for "Other"
 
-// A/B scenario: random 50/50, unless forced with ?ab=A / ?ab=B (for testing only)
-const _ab = (new URLSearchParams(location.search).get("ab") || "").toUpperCase();
-const scenarioVersion = (_ab === "A" || _ab === "B") ? _ab : (Math.random() < 0.5 ? "A" : "B");
+// Anonymous participant id (dedupe only; no PII). Stable across refreshes.
+function uuid() {
+  if (crypto && crypto.randomUUID) return crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0, v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+const participantId = (() => {
+  let id = localStorage.getItem("survey_pid");
+  if (!id) { id = uuid(); localStorage.setItem("survey_pid", id); }
+  return id;
+})();
+
+// Experimental condition: 50/50, persisted. ?cond=standard|lossless forces it (testing).
+let condition = (() => {
+  const forced = (new URLSearchParams(location.search).get("cond") || "").toLowerCase();
+  if (forced === "standard" || forced === "lossless") {
+    localStorage.setItem("survey_condition", forced);
+    return forced;
+  }
+  return localStorage.getItem("survey_condition") || null;  // assigned after Q8
+})();
+function ensureCondition() {
+  if (condition) return condition;
+  condition = Math.random() < 0.5 ? "standard" : "lossless";
+  localStorage.setItem("survey_condition", condition);
+  return condition;
+}
+
+// Comprehension-gate state machine
+const comp = {
+  phase: "ask",          // "ask" | "correct" | "confirm"
+  items: { Q9: blankComp(), Q10: blankComp() },
+  correctionShown: false,
+  finalConfirmRequired: false,
+  finalConfirmDone: false,
+  passed: false,
+};
+function blankComp() { return { first: null, firstCorrect: null, last: null, attempts: 0, ok: false }; }
+
+let q12Order = null;          // display order of Q12 items (recorded), set lazily
+let outcomeLocked = false;    // true after Q11 — blocks return to scenario/gate
 
 // Initial language: ?lang=en / ?lang=tr (or the /EN/ link) wins, else saved, else TR.
 function initialLang() {
@@ -36,8 +80,6 @@ let ended = false;
 let animating = false;
 let enterDir = 1;
 let submitState = "idle";
-let renderToken = 0;          // invalidates in-flight typing when the screen changes
-let scenarioRevealed = false; // type the conversation once, then show it instantly
 
 /* ----------------------------------------------------------------- HELPERS */
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
@@ -52,9 +94,11 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
 const t = (obj) => (obj && obj[lang] != null ? obj[lang] : obj && obj.en) || "";
 // display number prefix: "Q12" in English, "S12" in Turkish
 const qNum = (q) => (lang === "tr" ? "S" : "Q") + q.id.slice(1);
-const AUTO_TYPES = ["binary", "single", "multiple", "likert"];
+const scenarioSection = () => SURVEY.sections.find((s) => s.id === "scenario");
+const sectionOf = (id) => SURVEY.sections.find((s) => s.id === id);
+const otherIndexOf = (q) => (q.otherIndex != null ? q.otherIndex : q.options.length - 1);
 
-/* ----------------------------------------------------- FLOW (one Q / card) */
+/* ----------------------------------------------------- FLOW (cards) */
 function computeSkipped() {
   const skipped = new Set();
   SURVEY.sections.forEach((s) => (s.questions || []).forEach((q) => {
@@ -69,21 +113,14 @@ function buildScreens() {
   SURVEY.sections.forEach((s) => {
     if (s.type === "questions") {
       if (s.group) {
-        out.push({ kind: "group", s, qs: s.questions });          // all questions on one card
-      } else if (s.withScenario) {
-        // chunk into cards (default 3) beside the conversation; `solo` questions stay alone
-        let chunk = [];
-        const flush = () => { if (chunk.length) { out.push({ kind: "group", s, qs: chunk }); chunk = []; } };
-        s.questions.forEach((q) => {
-          if (q.solo) { flush(); out.push({ kind: "group", s, qs: [q] }); }
-          else { chunk.push(q); if (chunk.length >= (s.chunk || 3)) flush(); }
-        });
-        flush();
+        out.push({ kind: "group", s, qs: s.questions });            // all questions on one card
       } else {
         s.questions.forEach((q) => { if (!skipped.has(q.id)) out.push({ kind: "question", s, q }); });
       }
     } else if (s.type === "scenario") {
-      /* no standalone screen — the conversation types out inside the evaluation dual card */
+      out.push({ kind: "scenario", s });
+    } else if (s.type === "comprehension") {
+      out.push({ kind: "comprehension", s });
     } else {
       out.push({ kind: s.type, s }); // intro | thanks
     }
@@ -93,7 +130,6 @@ function buildScreens() {
 
 /* ----------------------------------------------------------------- RENDER */
 function render() {
-  renderToken++;                // cancel any in-flight typewriter from a previous screen
   const root = $("#screen");
   root.innerHTML = "";
   root.classList.remove("screen--wide");
@@ -106,13 +142,28 @@ function render() {
   screens = buildScreens();
   if (stepIndex > screens.length - 1) stepIndex = screens.length - 1;
   const screen = screens[stepIndex];
-  const isDual = !!(screen.s && screen.s.withScenario);
 
-  if (isDual) renderDual(root, screen);
-  else        renderSingle(root, screen);
+  if (screen.kind === "scenario") {
+    renderScenarioDual(root, screen);                 // two cards: text + service process
+  } else {
+    const card = newCard(screen.s.card);
+    card.classList.add("swipe-anim");
+    const body = el("div", "card__body");
 
-  // entering swipe animation on the swipe-anim element
-  const anim = $(".swipe-anim", root);
+    if (screen.kind === "intro")              renderIntro(body, screen.s);
+    else if (screen.kind === "thanks")        renderThanks(body, screen.s);
+    else if (screen.kind === "comprehension") renderComprehension(body, screen.s);
+    else if (screen.kind === "group")         renderQuestionList(body, screen.s, screen.qs);
+    else                                      renderQuestion(body, screen.s, screen.q);
+
+    card.appendChild(body);
+    if (screen.kind === "thanks") card.classList.add("card--center"); // centre text, no nav
+    else card.appendChild(buildNav(screen));
+    root.appendChild(card);
+  }
+
+  // entering swipe animation (whichever element carries .swipe-anim)
+  const anim = root.querySelector(".swipe-anim");
   if (anim) {
     anim.classList.add(enterDir >= 0 ? "is-enter-right" : "is-enter-left");
     requestAnimationFrame(() => requestAnimationFrame(() =>
@@ -120,54 +171,12 @@ function render() {
   }
 
   updateFooter(screen);
-  // Note: we intentionally do NOT scroll to top — keep the user where they were.
 }
 
 function newCard(color) {
   const card = el("section", "card");
   if (color) card.style.background = color;
   return card;
-}
-
-function renderSingle(root, screen) {
-  const card = newCard(screen.s.card);
-  card.classList.add("swipe-anim");
-  const body = el("div", "card__body");
-
-  if (screen.kind === "intro")       renderIntro(body, screen.s);
-  else if (screen.kind === "thanks") renderThanks(body, screen.s);
-  else if (screen.kind === "group")  renderQuestionList(body, screen.s, screen.qs);
-  else                               renderQuestion(body, screen.s, screen.q);
-
-  card.appendChild(body);
-  if (screen.kind === "thanks") card.classList.add("card--center"); // centre text, no nav
-  else card.appendChild(buildNav(screen));
-  root.appendChild(card);
-}
-
-function renderDual(root, screen) {
-  root.classList.add("screen--wide");
-  const scen = SURVEY.sections.find((s) => s.id === screen.s.withScenario);
-
-  const dual = el("div", "dual");
-
-  // left: the conversation (types out the first time it's seen, instant afterwards)
-  const chat = newCard(scen.card);
-  const chatBody = el("div", "card__body");
-  renderScenario(chatBody, scen, !scenarioRevealed);
-  chat.appendChild(chatBody);
-  dual.appendChild(chat);
-
-  // right: this card's questions (a chunk of up to `chunk`, this one swipes)
-  const qCard = newCard(screen.s.card);
-  qCard.classList.add("swipe-anim", "dual__q");
-  const qBody = el("div", "card__body");
-  renderQuestionList(qBody, screen.s, screen.qs);
-  qCard.appendChild(qBody);
-  qCard.appendChild(buildNav(screen));
-  dual.appendChild(qCard);
-
-  root.appendChild(dual);
 }
 
 function renderIntro(body, s) {
@@ -195,12 +204,12 @@ function statusText() {
 }
 function statusClass() { return submitState === "ok" ? "ok" : submitState === "err" ? "err" : ""; }
 
+/* ------------------------------------------------------- QUESTION BLOCKS */
 function buildQuestionBlock(q) {
   const qWrap = el("div", "q");
   qWrap.dataset.qid = q.id;
   qWrap.appendChild(el("p", "q__text", `<span class="q__num">${esc(qNum(q))}.</span>${esc(t(q.text))}`));
   if (q.type === "binary")      qWrap.appendChild(buildBinary(q));
-  else if (q.type === "likert") qWrap.appendChild(buildLikert(q));
   else if (q.type === "matrix") qWrap.appendChild(buildMatrix(q));
   else                          qWrap.appendChild(buildOptions(q));
   return qWrap;
@@ -212,7 +221,6 @@ function renderQuestion(body, s, q) {
   body.appendChild(buildQuestionBlock(q));
 }
 
-// a section header + a given list of questions on one card
 function renderQuestionList(body, s, qs) {
   body.appendChild(el("p", "section-eyebrow", esc(t(s.section))));
   body.appendChild(el("h2", "section-title", esc(t(s.title))));
@@ -238,19 +246,40 @@ function buildBinary(q) {
 }
 
 function buildOptions(q) {
-  const isChips = q.type === "single" && q.options.every((o) => t(o).length <= 22);
+  const isChips = q.type === "single" && !q.otherText && q.options.every((o) => t(o).length <= 22);
   const box = el("div", "options" + (isChips ? " options--chips" : ""));
+  let textInput = null;
   q.options.forEach((opt, i) => {
     const lab = el("label", "opt");
     const input = el("input");
     input.type = "radio"; input.name = q.id; input.checked = answers[q.id] === i;
-    input.addEventListener("change", () => { answers[q.id] = i; clearInvalid(q.id); onAnswered(q); });
+    input.addEventListener("change", () => {
+      answers[q.id] = i;
+      clearInvalid(q.id);
+      if (textInput) toggleOther(q, textInput);
+      onAnswered(q);
+    });
     lab.appendChild(input);
     lab.appendChild(el("span", "opt__dot"));
     lab.appendChild(el("span", "opt__label", esc(t(opt))));
     box.appendChild(lab);
   });
+  if (q.otherText) {
+    textInput = el("input", "other-text");
+    textInput.type = "text";
+    textInput.maxLength = 250;
+    textInput.placeholder = t(SURVEY.ui.otherPlaceholder);
+    textInput.value = answers[q.id + "_text"] || "";
+    textInput.addEventListener("input", () => { answers[q.id + "_text"] = textInput.value; });
+    box.appendChild(textInput);
+    toggleOther(q, textInput);
+  }
   return box;
+}
+
+function toggleOther(q, input) {
+  const show = answers[q.id] === otherIndexOf(q);
+  input.classList.toggle("is-hidden", !show);
 }
 
 // the two endpoint anchors (low … high) shown above a 1–7 scale
@@ -277,91 +306,188 @@ function scaleRow(name, isChecked, onPick) {
   return scale;
 }
 
-// single-statement 1–7 (endpoint-anchored, horizontal)
-function buildLikert(q) {
-  const sc = SURVEY.scales[q.scale];
-  const box = el("div", "matrix matrix--single");
-  box.appendChild(scaleAnchors(sc));
-  box.appendChild(scaleRow(q.id,
-    (v) => answers[q.id] === v,
-    (v) => { answers[q.id] = v; clearInvalid(q.id); onAnswered(q); }));
-  return box;
-}
-
-// several 1–7 rows sharing one scale (Q10, Q11)
+// several 1–7 statements sharing one scale (answers stored by TRUE row index)
 function buildMatrix(q) {
   const sc = SURVEY.scales[q.scale];
   if (!answers[q.id]) answers[q.id] = {};
   const box = el("div", "matrix");
   box.appendChild(scaleAnchors(sc));
-  q.rows.forEach((rowLabel, r) => {
+
+  let order = q.rows.map((_, r) => r);
+  if (q.randomize) {
+    if (q.id === "Q12" && !q12Order) q12Order = shuffle(order.slice());
+    if (q.id === "Q12") order = q12Order;
+  }
+
+  order.forEach((r) => {
     const row = el("div", "matrix__row");
-    row.appendChild(el("div", "matrix__label", esc(t(rowLabel))));
+    row.appendChild(el("div", "matrix__label", esc(t(q.rows[r]))));
     row.appendChild(scaleRow(`${q.id}_r${r}`,
       (v) => answers[q.id][`row${r}`] === v,
-      (v) => { answers[q.id][`row${r}`] = v; clearInvalid(q.id); }));
+      (v) => { answers[q.id][`row${r}`] = v; clearInvalid(q.id); onAnswered(q); }));
     box.appendChild(row);
   });
   return box;
 }
 
-function scenarioLines(s) { return s.dialogue.concat(s.versions[scenarioVersion]); }
-
-// one chat bubble with an inline "CHATBOT:" / "YOU:" label and a typeable text span
-function makeBubble(line, text) {
-  const b = el("div", `bubble ${line.who}`);
-  b.appendChild(el("span", "who", (line.who === "bot" ? t(SURVEY.ui.chatbot) : t(SURVEY.ui.customer)) + ":"));
-  b.appendChild(document.createTextNode(" "));
-  const span = el("span", "bubble__text");
-  span.textContent = text;
-  b.appendChild(span);
-  return b;
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
 }
 
-// instant render — used in the evaluation dual layout (conversation already seen)
-// conversation card. `animate` types it out the first time; instant afterwards.
-function renderScenario(body, s, animate) {
-  body.appendChild(el("h2", "section-title", esc(t(s.title))));
-  body.appendChild(el("p", "scenario__intro", esc(t(s.intro))));
-  const chat = el("div", "chat");
-  body.appendChild(chat);
+/* --------------------------------------------------------- SCENARIO CARD */
+// condition-specific "How the service process works" block.
+// `bare` drops the bordered box (used when the block IS its own card).
+function buildProcessBlock(scen, bare) {
+  const cond = ensureCondition();
+  const c = scen.conditions[cond];
+  const wrap = el("div", "process" + (bare ? " process--bare" : ""));
+  wrap.appendChild(el("h3", "process__heading", esc(t(SURVEY.ui.processHeading))));
+  wrap.appendChild(el("p", "process__lead", esc(t(SURVEY.ui.ifChatbot))));
+  const ol = el("ol", "process__steps");
+  c.steps.forEach((step) => ol.appendChild(el("li", null, esc(t(step)))));
+  wrap.appendChild(ol);
+  wrap.appendChild(el("p", "process__summary", esc(t(c.summary))));
+  wrap.appendChild(el("p", "process__arrow", esc(t(c.arrow))));
+  return wrap;
+}
 
-  const lines = scenarioLines(s);
-  if (animate && !scenarioRevealed) {
-    typeScenario(chat, lines, renderToken);
+// Two cards: left/top = scenario narrative, right/bottom = service process (white).
+function renderScenarioDual(root, screen) {
+  ensureCondition();
+  const s = screen.s;
+  root.classList.add("screen--wide");
+  const dual = el("div", "dual swipe-anim");
+
+  // left — scenario narrative
+  const left = newCard(s.card);
+  const lb = el("div", "card__body");
+  lb.appendChild(el("p", "section-eyebrow", esc(t(s.section))));
+  lb.appendChild(el("h2", "section-title", esc(t(s.title))));
+  const intro = el("div", "scenario__intro");
+  s.common.forEach((p) => intro.appendChild(el("p", null, esc(t(p)))));
+  lb.appendChild(intro);
+  lb.appendChild(el("p", "scenario__note", esc(t(s.note))));
+  left.appendChild(lb);
+  dual.appendChild(left);
+
+  // right — service process (white card) + nav
+  const right = newCard("#ffffff");
+  right.classList.add("dual__process");
+  const rb = el("div", "card__body");
+  rb.appendChild(buildProcessBlock(s, true));
+  right.appendChild(rb);
+  right.appendChild(buildNav(screen));
+  dual.appendChild(right);
+
+  root.appendChild(dual);
+}
+
+/* ----------------------------------------------------- COMPREHENSION GATE */
+function isCorrect(qid, idx) {
+  const q = sectionOf("comprehension").questions.find((x) => x.id === qid);
+  return idx === q.correct[ensureCondition()];
+}
+
+function renderComprehension(body, s) {
+  ensureCondition();
+  body.appendChild(el("p", "section-eyebrow", esc(t(s.section))));
+  body.appendChild(el("h2", "section-title", esc(t(s.title))));
+
+  // collapsible "Review the service process"
+  const det = el("details", "review");
+  det.appendChild(el("summary", "review__summary", esc(t(SURVEY.ui.reviewProcess))));
+  det.appendChild(buildProcessBlock(scenarioSection(), true));   // bare — the panel already frames it
+  body.appendChild(det);
+
+  if (comp.phase === "ask") {
+    body.appendChild(el("p", "scenario__note", esc(t(s.instruction))));
+    s.questions.forEach((q) => body.appendChild(buildQuestionBlock(q)));
   } else {
-    lines.forEach((line) => chat.appendChild(makeBubble(line, t(line.text))));
+    // correction message (condition-specific)
+    const note = el("div", "correction");
+    note.appendChild(el("h3", "correction__heading", esc(t(SURVEY.ui.correctionHeading))));
+    SURVEY.corrections[ensureCondition()].forEach((p) => note.appendChild(el("p", null, esc(t(p)))));
+    body.appendChild(note);
+
+    if (comp.phase === "correct") {
+      // re-ask only the still-incorrect questions
+      s.questions.forEach((q) => { if (!comp.items[q.id].ok) body.appendChild(buildQuestionBlock(q)); });
+    } else {
+      // confirm phase — single checkbox, no re-scoring
+      const lab = el("label", "confirm-box");
+      const input = el("input");
+      input.type = "checkbox"; input.id = "finalConfirm";
+      input.checked = comp.finalConfirmDone;
+      input.addEventListener("change", () => { comp.finalConfirmDone = input.checked; });
+      lab.appendChild(input);
+      lab.appendChild(el("span", "opt__dot"));
+      lab.appendChild(el("span", "opt__label", esc(t(SURVEY.finalConfirm))));
+      body.appendChild(lab);
+    }
   }
 }
 
-function typeScenario(chat, lines, token) {
-  let i = 0;
-  (function nextLine() {
-    if (token !== renderToken) return;                 // user navigated away
-    if (i >= lines.length) {
-      scenarioRevealed = true;                          // seen once → show instantly next time
-      return;
-    }
-    const line = lines[i++];
-    const bubble = makeBubble(line, "");
-    chat.appendChild(bubble);
-    const span = bubble.querySelector(".bubble__text");
-    span.classList.add("is-typing");
-    typeText(span, t(line.text), token, () => {
-      span.classList.remove("is-typing");
-      setTimeout(nextLine, 240);                         // brief pause between bubbles
+function handleComprehensionNext() {
+  const s = sectionOf("comprehension");
+
+  if (comp.phase === "ask") {
+    const missing = s.questions.filter((q) => answers[q.id] == null).map((q) => q.id);
+    if (missing.length) { flagMissing(missing); return; }
+    s.questions.forEach((q) => {
+      const it = comp.items[q.id];
+      const idx = answers[q.id];
+      it.first = idx; it.last = idx; it.attempts = 1;
+      it.firstCorrect = isCorrect(q.id, idx);
+      it.ok = it.firstCorrect;
     });
-  })();
+    if (s.questions.every((q) => comp.items[q.id].ok)) { passGate(); return; }
+    comp.correctionShown = true;
+    comp.phase = "correct";
+    // clear the wrong answers so the retry radios start empty
+    s.questions.forEach((q) => { if (!comp.items[q.id].ok) delete answers[q.id]; });
+    rerender();
+    return;
+  }
+
+  if (comp.phase === "correct") {
+    const wrong = s.questions.filter((q) => !comp.items[q.id].ok);
+    const missing = wrong.filter((q) => answers[q.id] == null).map((q) => q.id);
+    if (missing.length) { flagMissing(missing); return; }
+    wrong.forEach((q) => {
+      const it = comp.items[q.id];
+      const idx = answers[q.id];
+      it.last = idx; it.attempts += 1;
+      it.ok = isCorrect(q.id, idx);
+    });
+    if (s.questions.every((q) => comp.items[q.id].ok)) { passGate(); return; }
+    // a second miss → final confirmation, no further scoring
+    comp.finalConfirmRequired = true;
+    comp.phase = "confirm";
+    rerender();
+    return;
+  }
+
+  // confirm phase
+  if (!comp.finalConfirmDone) {
+    const node = document.getElementById("finalConfirm");
+    if (node) node.closest(".confirm-box").classList.add("q--invalid");
+    return;
+  }
+  passGate();
 }
 
-function typeText(node, full, token, done) {
-  let n = 0;
-  (function step() {
-    if (token !== renderToken) return;
-    node.textContent = full.slice(0, n);
-    if (n < full.length) { n++; setTimeout(step, 12); }  // ~12ms/char — brisk
-    else done();
-  })();
+function passGate() {
+  comp.passed = true;
+  changeStep(1, {});
+}
+
+function rerender() {
+  enterDir = 1;
+  render();
 }
 
 /* ----------------------------------------------------------------- NAV */
@@ -369,7 +495,7 @@ function buildNav(screen) {
   const nav = el("div", "nav");
   const back = el("button", "btn btn--back", esc(t(SURVEY.ui.back)));
   back.type = "button";
-  if (stepIndex === 0 || screen.kind === "thanks") back.classList.add("btn--ghost");
+  if (stepIndex === 0 || screen.kind === "thanks" || backBlocked()) back.classList.add("btn--ghost");
   back.addEventListener("click", goBack);
   nav.appendChild(back);
 
@@ -386,31 +512,45 @@ function buildNav(screen) {
   return nav;
 }
 
+// once Q11 is submitted, the scenario and comprehension gate are off-limits
+function backBlocked() {
+  if (!outcomeLocked) return false;
+  const prev = screens[stepIndex - 1];
+  return !!(prev && ["scenario", "comprehension", "choice"].includes(prev.s.id));
+}
+
 function onAnswered(q) {
   if (!AUTO_ADVANCE) return;
   const cur = screens[stepIndex];
+  if (cur && cur.kind === "comprehension") return;          // gate is driven by Next only
+  // don't auto-advance when an "Other" option needs a typed answer
+  if (q.otherText && answers[q.id] === otherIndexOf(q)) return;
+
   if (cur && cur.kind === "group") {
-    // advance once every question on the card has an answer
     if (cur.qs.every((qq) => isAnswered(qq))) {
       setTimeout(() => { if (!animating) goNext(); }, 450);
     }
     return;
   }
-  if (!AUTO_TYPES.includes(q.type)) return;
+  // single-question card: advance once it's fully answered
+  // (binary/single = immediately; matrix = once every statement is rated)
+  if (!isAnswered(q)) return;
   const next = buildScreens()[stepIndex + 1];
   const endsHere = q.type === "binary" && q.endIfNo && answers[q.id] === 1;
   if (!endsHere && (!next || next.kind === "thanks")) return; // don't auto-submit
-  setTimeout(() => { if (!animating) goNext(); }, 420);
+  setTimeout(() => { if (!animating) goNext(); }, q.type === "matrix" ? 520 : 420);
 }
 
 function goBack() {
-  if (animating || stepIndex === 0) return;
+  if (animating || stepIndex === 0 || backBlocked()) return;
   changeStep(-1, {});
 }
 
 function goNext() {
   if (animating) return;
   const screen = screens[stepIndex];
+
+  if (screen.kind === "comprehension") { handleComprehensionNext(); return; }
 
   if (screen.kind === "question") {
     if (!isAnswered(screen.q)) { flagMissing(screen.q.id); return; }
@@ -425,6 +565,9 @@ function goNext() {
       if (q.type === "binary" && q.endIfNo && answers[q.id] === 1) { changeStep(1, { end: true }); return; }
     }
   }
+
+  // leaving the channel-choice screen locks backward navigation to the scenario/gate
+  if (screen.s.id === "choice") outcomeLocked = true;
 
   screens = buildScreens();
   const next = screens[stepIndex + 1];
@@ -493,10 +636,10 @@ function clearInvalid(id) {
 
 /* ----------------------------------------------------------------- FOOTER */
 function updateFooter(screen) {
-  const p = screen ? (screen.s.progress || 0) : 0;
   const frac = !ended && screens.length > 1 ? stepIndex / (screens.length - 1) : 0;
+  const pct = Math.round(frac * 100);
   $("#progressFill").style.width = `${Math.max(frac * 100, ended ? 0 : 2)}%`;
-  $("#progressLabel").textContent = `${t(SURVEY.ui.progress)} ${p}/5`;
+  $("#progressLabel").textContent = `${t(SURVEY.ui.progress)} ${ended ? 0 : pct}%`;
   $("#author").textContent = t(SURVEY.ui.author);
 }
 
@@ -522,16 +665,54 @@ function setLang(next) {
 }
 
 /* ----------------------------------------------------------------- SUBMIT */
+function compLabel(qid, idx) {
+  if (idx == null) return "";
+  const q = sectionOf("comprehension").questions.find((x) => x.id === qid);
+  return q.options[idx].en;
+}
+
 function buildPayload() {
-  const out = {};
-  SURVEY.sections.forEach((s) => (s.questions || []).forEach((q) => {
-    const a = answers[q.id];
-    if (a == null) return;
-    if (q.type === "binary") out[q.id] = a === 0 ? "Yes" : "No";
-    else if (q.type === "single" || q.type === "multiple") out[q.id] = q.options[a].en;
-    else out[q.id] = a; // likert (1..7) | matrix ({row0:..})
-  }));
-  return { submittedAt: new Date().toISOString(), scenarioVersion, language: lang, answers: out };
+  const a = {};
+  SURVEY.sections.forEach((s) => {
+    if (s.id === "comprehension") return;        // handled below
+    (s.questions || []).forEach((q) => {
+      const v = answers[q.id];
+      if (q.type === "binary") { if (v != null) a[q.id] = v === 0 ? "Yes" : "No"; }
+      else if (q.type === "matrix") {
+        const m = answers[q.id] || {};
+        (q.keys || []).forEach((k, r) => { if (m[`row${r}`] != null) a[k] = m[`row${r}`]; });
+        if (q.id === "Q12") a.q12_item_order = (q12Order || q.rows.map((_, i) => i)).map((i) => i + 1).join(",");
+      } else { // single
+        if (v != null) a[q.id] = q.id === "Q11" ? (v === 0 ? "chatbot" : "human") : q.options[v].en;
+      }
+      if (q.otherText && answers[q.id + "_text"]) a[q.id + "_text"] = answers[q.id + "_text"];
+    });
+  });
+  // Q5 not applicable when Q4 = "Never"
+  if (answers.Q4 === 0) a.Q5 = "not_applicable";
+
+  // comprehension
+  const c9 = comp.items.Q9, c10 = comp.items.Q10;
+  a.q9_first_answer = compLabel("Q9", c9.first);
+  a.q9_first_correct = c9.firstCorrect;
+  a.q9_final_answer = compLabel("Q9", c9.last);
+  a.q9_attempt_count = c9.attempts;
+  a.q10_first_answer = compLabel("Q10", c10.first);
+  a.q10_first_correct = c10.firstCorrect;
+  a.q10_final_answer = compLabel("Q10", c10.last);
+  a.q10_attempt_count = c10.attempts;
+  a.correction_shown = comp.correctionShown;
+  a.final_confirmation_required = comp.finalConfirmRequired;
+  a.final_confirmation_completed = comp.finalConfirmDone;
+  a.comprehension_passed = comp.passed;
+
+  return {
+    submittedAt: new Date().toISOString(),
+    participant_id: participantId,
+    condition: condition,
+    language: lang,
+    answers: a,
+  };
 }
 
 function setStatus(state) {
