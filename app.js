@@ -371,7 +371,6 @@ function renderScenarioDual(root, screen) {
   const intro = el("div", "scenario__intro");
   s.common.forEach((p) => intro.appendChild(el("p", null, esc(t(p)))));
   lb.appendChild(intro);
-  lb.appendChild(el("p", "scenario__note", esc(t(s.note))));
   left.appendChild(lb);
   dual.appendChild(left);
 

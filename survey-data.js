@@ -200,11 +200,7 @@ const SURVEY = {
           "Bina girişini, resepsiyonu ve paketin bırakılmış olabileceği diğer yerleri kontrol ettiniz; komşularınıza ve birlikte yaşadığınız kişilere de sordunuz. Buna rağmen paketi bulamadınız."),
         L("You open the platform's customer-service page. An AI-driven chatbot is available immediately, while the estimated waiting time for a human representative is 10 minutes. The chatbot can access your order information and attempt to resolve the delivery issue, although it may not be able to resolve every case.",
           "Platformun müşteri hizmetleri sayfasını açıyorsunuz. Yapay zekâ destekli chatbot hemen kullanılabilirken, bir müşteri temsilcisi için tahmini bekleme süresi 10 dakikadır. Chatbot sipariş bilgilerinize erişebilir ve teslimat sorununu çözmeye çalışabilir, ancak her durumda çözüm sağlayamayabilir."),
-        L("Before you choose a service channel, the platform displays the following information.",
-          "Bir kanal seçmeden önce platform aşağıdaki bilgileri gösteriyor."),
       ],
-      note: L("Please read the following service process carefully. You will answer two short questions about how the process works before continuing.",
-              "Lütfen aşağıdaki hizmet sürecini dikkatlice okuyun. Devam etmeden önce sürecin nasıl işlediğine ilişkin iki kısa soruyu yanıtlayacaksınız."),
       conditions: {
         standard: {
           steps: [
