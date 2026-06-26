@@ -56,7 +56,7 @@ const SURVEY = {
   // 1–7 scale — three reference anchors (1 / 4 / 7)
   scales: {
     agreement: { low: L("Strongly disagree", "Kesinlikle katılmıyorum"),
-                 mid: L("Neither agree nor disagree", "Kararsızım"),
+                 mid: L("Neither agree nor disagree", "Ne katılıyorum ne katılmıyorum"),
                  high: L("Strongly agree", "Kesinlikle katılıyorum") },
   },
 
@@ -255,7 +255,7 @@ const SURVEY = {
                   "Chatbotu kullanmaya başladığınızı ve chatbotun sorununuzu çözemediğini düşünün. Müşteri temsilcisi için 10 dakikalık bekleme süresi ne zaman başlar?"),
           options: [
             L("At the same time as the chatbot interaction begins", "Chatbot görüşmesi başladığı anda"),
-            L("Immediately after your conversation with the chatbot ends", "Chatbot ile görüşmeniz bittikten hemen sonra"),
+            L("Only after the chatbot interaction ends without resolving the problem", "Chatbot görüşmesi sorunu çözemeden sona erdikten sonra"),
             L("There would be no waiting time for a human representative", "Müşteri temsilcisi için herhangi bir bekleme süresi olmaz"),
             L("I am not sure", "Emin değilim"),
           ] },
