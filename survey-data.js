@@ -32,8 +32,7 @@ const SURVEY = {
 
     // comprehension gate
     reviewProcess:  L("Review the service process", "Hizmet sürecini incele"),
-    processHeading: L("How the service process works", "Hizmet süreci nasıl işliyor"),
-    ifChatbot:      L("If you choose the chatbot:", "Chatbotu seçerseniz:"),
+    processHeading: L("How does the process work if you choose the chatbot?", "Chatbotu seçtiğinizde süreç nasıl ilerler?"),
     correctionHeading: L("Please review the service process", "Lütfen hizmet sürecini dikkatlice yeniden inceleyin"),
 
     confirmTitle: L("Are you sure?", "Emin misiniz?"),
@@ -195,14 +194,14 @@ const SURVEY = {
       section: L("Section 4", "Bölüm 4"),
       title: L("Customer-Service Scenario", "Müşteri Hizmetleri Senaryosu"),
       common: [
-        L("Imagine that you ordered a moderately priced pair of wireless headphones from an online marketplace. The delivery tracking page shows that the package was delivered yesterday, but you have not received it.",
-          "Ortalama fiyata sahip bir kablosuz kulaklığı, bir çevrim içi alışveriş platformundan sipariş ettiğinizi düşünün. Kargo takip sayfasında paketin dün teslim edildiği görünüyor, ancak paket size ulaşmadı."),
-        L("You have already checked your building entrance, reception area, safe locations, and asked your neighbours and household members. The package is still missing.",
-          "Bina girişini, resepsiyonu ve paketin bırakılmış olabileceği diğer güvenli alanları kontrol ettiniz. Ayrıca komşularınıza ve birlikte yaşadığınız kişilere sordunuz. Buna rağmen paketi bulamadınız."),
-        L("You open the marketplace's customer-service page. An AI-driven customer-service chatbot is available immediately. A human customer-service representative is available after an estimated waiting time of 10 minutes. The chatbot can access the order information and attempt to assist with delivery-related problems, although it may not be able to resolve every case.",
-          "Alışveriş platformunun müşteri hizmetleri sayfasını açıyorsunuz. Yapay zekâ destekli müşteri hizmetleri chatbotu hemen kullanılabilir durumda. Bir müşteri temsilcisine ulaşmak içinse tahmini bekleme süresi 10 dakikadır. Chatbot sipariş bilgilerinize erişebilir ve teslimatla ilgili sorununuza yardımcı olmaya çalışabilir. Ancak her sorunu çözmesi mümkün olmayabilir."),
-        L("Before selecting a service channel, the platform provides the following information.",
-          "Bir müşteri hizmetleri kanalı seçmeden önce platform size aşağıdaki bilgileri gösteriyor."),
+        L("Imagine that you ordered a moderately priced pair of wireless headphones from an online marketplace. The tracking page shows that the package was delivered yesterday, but you have not received it.",
+          "Orta fiyatlı bir kablosuz kulaklığı çevrim içi bir alışveriş platformundan sipariş ettiğinizi düşünün. Kargo takip sayfasında paket dün teslim edilmiş görünüyor, ancak size ulaşmadı."),
+        L("You checked the building entrance, reception area, and other possible delivery locations, and also asked your neighbours and household members. However, the package is still missing.",
+          "Bina girişini, resepsiyonu ve paketin bırakılmış olabileceği diğer yerleri kontrol ettiniz; komşularınıza ve birlikte yaşadığınız kişilere de sordunuz. Buna rağmen paketi bulamadınız."),
+        L("You open the platform's customer-service page. An AI-driven chatbot is available immediately, while the estimated waiting time for a human representative is 10 minutes. The chatbot can access your order information and attempt to resolve the delivery issue, although it may not be able to resolve every case.",
+          "Platformun müşteri hizmetleri sayfasını açıyorsunuz. Yapay zekâ destekli chatbot hemen kullanılabilirken, bir müşteri temsilcisi için tahmini bekleme süresi 10 dakikadır. Chatbot sipariş bilgilerinize erişebilir ve teslimat sorununu çözmeye çalışabilir, ancak her durumda çözüm sağlayamayabilir."),
+        L("Before you choose a service channel, the platform displays the following information.",
+          "Bir kanal seçmeden önce platform aşağıdaki bilgileri gösteriyor."),
       ],
       note: L("Please read the following service process carefully. You will answer two short questions about how the process works before continuing.",
               "Lütfen aşağıdaki hizmet sürecini dikkatlice okuyun. Devam etmeden önce sürecin nasıl işlediğine ilişkin iki kısa soruyu yanıtlayacaksınız."),

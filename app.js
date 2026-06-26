@@ -348,7 +348,6 @@ function buildProcessBlock(scen, bare) {
   const c = scen.conditions[cond];
   const wrap = el("div", "process" + (bare ? " process--bare" : ""));
   wrap.appendChild(el("h3", "process__heading", esc(t(SURVEY.ui.processHeading))));
-  wrap.appendChild(el("p", "process__lead", esc(t(SURVEY.ui.ifChatbot))));
   const ol = el("ol", "process__steps");
   c.steps.forEach((step) => ol.appendChild(el("li", null, esc(t(step)))));
   wrap.appendChild(ol);
