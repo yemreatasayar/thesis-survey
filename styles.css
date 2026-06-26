@@ -171,6 +171,12 @@ input:focus-visible + .opt__dot { outline: 2px solid var(--green); outline-offse
 .matrix { display: flex; flex-direction: column; gap: 22px; }
 .matrix__anchors { display: flex; justify-content: space-between; font-weight: 600; font-size: 12px; color: var(--muted); gap: 12px; padding: 0 2px; }
 .matrix__anchors span:last-child { text-align: right; }
+/* three reference anchors (1 / 4 / 7) — evenly spread, words may wrap */
+.matrix__anchors--triple { gap: 8px; align-items: start; }
+.matrix__anchors--triple .matrix__anchor { flex: 1 1 0; min-width: 0; line-height: 1.2; }
+.matrix__anchor--low { text-align: left; }
+.matrix__anchor--mid { text-align: center; }
+.matrix__anchor--high { text-align: right; }
 /* thin divider between each task for breathing room */
 .matrix__row { display: flex; flex-direction: column; gap: 11px; padding-bottom: 22px; border-bottom: 1px solid rgba(5, 5, 5, 0.12); }
 .matrix__row:last-child { padding-bottom: 0; border-bottom: none; }

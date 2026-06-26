@@ -16,6 +16,7 @@
 /* ----------------------------------------------------------------- CONFIG */
 const SHEETS_ENDPOINT = "https://script.google.com/macros/s/AKfycbyXTnovAl66NST70RKK4fbI7x8jVB5BlI4fxY_t4g2U6UNNJ_of1S93SxEgFK75e0obIA/exec";
 const SUBMIT_ENABLED = false;  // MASTER SWITCH — false = don't write to the Sheet (test mode). Flip to true to collect data.
+const DEBUG_MODE = false;      // true = enable test-only URL params (?cond, ?preview) + bypass completion lock. MUST be false in production.
 const AUTO_ADVANCE = true;     // auto-move to next card after a single-tap answer
 
 /* --------------------------------------------------------------- STATE */
@@ -35,9 +36,9 @@ const participantId = (() => {
   return id;
 })();
 
-// Experimental condition: 50/50, persisted. ?cond=standard|lossless forces it (testing).
+// Experimental condition: 50/50, persisted. ?cond=standard|lossless forces it (DEBUG only).
 let condition = (() => {
-  const forced = (new URLSearchParams(location.search).get("cond") || "").toLowerCase();
+  const forced = DEBUG_MODE ? (new URLSearchParams(location.search).get("cond") || "").toLowerCase() : "";
   if (forced === "standard" || forced === "lossless") {
     localStorage.setItem("survey_condition", forced);
     return forced;
@@ -282,11 +283,12 @@ function toggleOther(q, input) {
   input.classList.toggle("is-hidden", !show);
 }
 
-// the two endpoint anchors (low … high) shown above a 1–7 scale
+// reference anchors above a 1–7 scale: low (1) … mid (4) … high (7)
 function scaleAnchors(sc) {
-  const a = el("div", "matrix__anchors");
-  a.appendChild(el("span", null, esc(t(sc.low))));
-  a.appendChild(el("span", null, esc(t(sc.high))));
+  const a = el("div", "matrix__anchors" + (sc.mid ? " matrix__anchors--triple" : ""));
+  a.appendChild(el("span", "matrix__anchor matrix__anchor--low", esc(t(sc.low))));
+  if (sc.mid) a.appendChild(el("span", "matrix__anchor matrix__anchor--mid", esc(t(sc.mid))));
+  a.appendChild(el("span", "matrix__anchor matrix__anchor--high", esc(t(sc.high))));
   return a;
 }
 
@@ -523,6 +525,9 @@ function onAnswered(q) {
   if (!AUTO_ADVANCE) return;
   const cur = screens[stepIndex];
   if (cur && cur.kind === "comprehension") return;          // gate is driven by Next only
+  // Q11 channel choice (lockBefore): require an explicit NEXT — an accidental tap
+  // must not auto-advance and trigger the irreversible back-nav lock.
+  if (cur && cur.s && cur.s.lockBefore) return;
   // don't auto-advance when an "Other" option needs a typed answer
   if (q.otherText && answers[q.id] === otherIndexOf(q)) return;
 
@@ -685,7 +690,8 @@ function buildPayload() {
       } else { // single
         if (v != null) a[q.id] = q.id === "Q11" ? (v === 0 ? "chatbot" : "human") : q.options[v].en;
       }
-      if (q.otherText && answers[q.id + "_text"]) a[q.id + "_text"] = answers[q.id + "_text"];
+      // only keep "Other" text if "Other" is still the selected option
+      if (q.otherText && v === otherIndexOf(q) && answers[q.id + "_text"]) a[q.id + "_text"] = answers[q.id + "_text"];
     });
   });
   // Q5 not applicable when Q4 = "Never"
@@ -735,6 +741,9 @@ async function submit() {
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload),
     });
+    // browser-side completion flag (reduces accidental duplicate participation;
+    // the Apps Script participant_id dedupe is the authoritative guard).
+    localStorage.setItem("survey_completed", "true");
     setStatus("ok");
   } catch (e) {
     console.error("[survey] submit failed", e);
@@ -746,9 +755,37 @@ async function submit() {
 function init() {
   $("#langTR").addEventListener("click", () => setLang("tr"));
   $("#langEN").addEventListener("click", () => setLang("en"));
+
+  // already completed on this browser → show a neutral message, don't re-take
+  // (DEBUG_MODE bypasses so the flow can be re-tested)
+  if (!DEBUG_MODE && localStorage.getItem("survey_completed") === "true") {
+    renderCompleted();
+    return;
+  }
+
   screens = buildScreens();
-  const pv = new URLSearchParams(location.search).get("preview");
-  if (pv != null && screens[+pv]) stepIndex = +pv;
+  if (DEBUG_MODE) {                                    // ?preview=N jumps to a screen (test only)
+    const pv = new URLSearchParams(location.search).get("preview");
+    if (pv != null && screens[+pv]) stepIndex = +pv;
+  }
   render();
+}
+
+// neutral "you already completed this survey" screen
+function renderCompleted() {
+  const root = $("#screen");
+  root.innerHTML = "";
+  root.classList.remove("screen--wide");
+  $("#appTitle").textContent = t(SURVEY.title);
+  const card = newCard("#f0faff");
+  card.classList.add("card--center");
+  const body = el("div", "card__body");
+  const wrap = el("div", "centered-card");
+  wrap.appendChild(el("h2", "centered-card__title", esc(t(SURVEY.ui.doneTitle))));
+  wrap.appendChild(el("p", "centered-card__body", esc(t(SURVEY.ui.doneBody))));
+  body.appendChild(wrap);
+  card.appendChild(body);
+  root.appendChild(card);
+  updateFooter(null);
 }
 init();

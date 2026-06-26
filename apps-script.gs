@@ -50,6 +50,24 @@ function doPost(e) {
       sheet.appendRow(HEADERS);
     }
 
+    // Duplicate guard: never write the same participant_id twice (last line of
+    // defence against refresh/retry double-submits; browser flag is the first).
+    var pid = data.participant_id || "";
+    if (pid) {
+      var pidCol = HEADERS.indexOf("participant_id") + 1;   // 1-based
+      var lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        var existing = sheet.getRange(2, pidCol, lastRow - 1, 1).getValues();
+        for (var i = 0; i < existing.length; i++) {
+          if (String(existing[i][0]) === String(pid)) {
+            return ContentService
+              .createTextOutput(JSON.stringify({ ok: true, duplicate: true }))
+              .setMimeType(ContentService.MimeType.JSON);
+          }
+        }
+      }
+    }
+
     var row = HEADERS.map(function (h) {
       if (h === "timestamp") return data.submittedAt || new Date().toISOString();
       if (h === "participant_id") return data.participant_id || "";
