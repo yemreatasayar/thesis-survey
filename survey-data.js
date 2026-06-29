@@ -44,12 +44,12 @@ const SURVEY = {
     endedBody:  L("Based on your response, this survey is not applicable to you. You may now close this page. No data has been collected.",
                   "Verdiğiniz yanıt doğrultusunda bu anket size uygun değildir. Bu sayfayı kapatabilirsiniz. Hiçbir veri toplanmamıştır."),
     doneTitle: L("You have already completed this survey", "Bu anketi zaten tamamladınız"),
-    doneBody:  L("Thank you — your responses have already been recorded. You may now close this page.",
-                 "Teşekkürler — yanıtlarınız daha önce kaydedildi. Bu sayfayı kapatabilirsiniz."),
+    doneBody:  L("Thank you, your responses have already been recorded. You may now close this page.",
+                 "Teşekkürler, yanıtlarınız daha önce kaydedildi. Bu sayfayı kapatabilirsiniz."),
     sending: L("Sending your responses…", "Yanıtlarınız gönderiliyor…"),
     ok:      L("✓ Your responses were recorded. You may close this page.", "✓ Yanıtlarınız kaydedildi. Bu sayfayı kapatabilirsiniz."),
-    err:     L("Could not send your responses. Please check your connection — your answers are kept on this page.",
-               "Yanıtlarınız gönderilemedi. Lütfen bağlantınızı kontrol edin — cevaplarınız bu sayfada saklanıyor."),
+    err:     L("Could not send your responses. Please check your connection. Your answers are kept on this page.",
+               "Yanıtlarınız gönderilemedi. Lütfen bağlantınızı kontrol edin. Cevaplarınız bu sayfada saklanıyor."),
   },
 
   // 1–7 scale — three reference anchors (1 / 4 / 7)
