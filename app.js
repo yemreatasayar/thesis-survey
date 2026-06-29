@@ -14,8 +14,8 @@
    ========================================================================== */
 
 /* ----------------------------------------------------------------- CONFIG */
-const SHEETS_ENDPOINT = "https://script.google.com/macros/s/AKfycbyXTnovAl66NST70RKK4fbI7x8jVB5BlI4fxY_t4g2U6UNNJ_of1S93SxEgFK75e0obIA/exec";
-const SUBMIT_ENABLED = false;  // MASTER SWITCH — false = don't write to the Sheet (test mode). Flip to true to collect data.
+const SHEETS_ENDPOINT = "https://script.google.com/macros/s/AKfycbwuVgTmrPn2FiIDo2V-dNeMic4DtZ9RmBQmjnwKbOHoVsHVSItwWTz9_XhktH3vUGXJ_Q/exec";
+const SUBMIT_ENABLED = true;   // MASTER SWITCH — false = don't write to the Sheet (test mode). Flip to true to collect data.
 const DEBUG_MODE = false;      // true = enable test-only URL params (?cond, ?preview) + bypass completion lock. MUST be false in production.
 const AUTO_ADVANCE = true;     // auto-move to next card after a single-tap answer
 
