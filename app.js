@@ -81,6 +81,8 @@ let ended = false;
 let animating = false;
 let enterDir = 1;
 let submitState = "idle";
+// already completed on this browser? locks re-takes (DEBUG_MODE bypasses for testing)
+const COMPLETED = !DEBUG_MODE && localStorage.getItem("survey_completed") === "true";
 
 /* ----------------------------------------------------------------- HELPERS */
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
@@ -138,6 +140,7 @@ function render() {
   $("#langTR").classList.toggle("active", lang === "tr");
   $("#langEN").classList.toggle("active", lang === "en");
 
+  if (COMPLETED) { renderCompletedCard(root); updateFooter(null); return; }
   if (ended) { renderEnded(root); updateFooter(null); return; }
 
   screens = buildScreens();
@@ -754,13 +757,6 @@ function init() {
   $("#langTR").addEventListener("click", () => setLang("tr"));
   $("#langEN").addEventListener("click", () => setLang("en"));
 
-  // already completed on this browser → show a neutral message, don't re-take
-  // (DEBUG_MODE bypasses so the flow can be re-tested)
-  if (!DEBUG_MODE && localStorage.getItem("survey_completed") === "true") {
-    renderCompleted();
-    return;
-  }
-
   screens = buildScreens();
   if (DEBUG_MODE) {                                    // ?preview=N jumps to a screen (test only)
     const pv = new URLSearchParams(location.search).get("preview");
@@ -769,12 +765,8 @@ function init() {
   render();
 }
 
-// neutral "you already completed this survey" screen
-function renderCompleted() {
-  const root = $("#screen");
-  root.innerHTML = "";
-  root.classList.remove("screen--wide");
-  $("#appTitle").textContent = t(SURVEY.title);
+// neutral "you already completed this survey" card (root already prepared by render)
+function renderCompletedCard(root) {
   const card = newCard("#f0faff");
   card.classList.add("card--center");
   const body = el("div", "card__body");
@@ -784,6 +776,5 @@ function renderCompleted() {
   body.appendChild(wrap);
   card.appendChild(body);
   root.appendChild(card);
-  updateFooter(null);
 }
 init();
